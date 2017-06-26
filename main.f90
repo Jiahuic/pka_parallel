@@ -6,15 +6,17 @@
 ! 5. Linear Intepolation of the collocation method derived by Atkinson  ------No
 ! 6. Simply the one-particle-per-element treecode as what Lu has done with FMM PB
 ! 7. Extension from spherical cavity to real molecules
-! 8. Preconditioning: Diagnal Scaling 
+! 8. Preconditioning: Diagnal Scaling
 
-program TABIPB 
+program TABIPB
 use molecule
 use comdata
 use bicg
 use treecode
 use treecode3d_procedures
+use MPI_var
 implicit double precision(a-h,o-z)
+integer i
 real*8 r0(3), Pxyz(3), err_surf(10,6), err_reaction(10,6), err_reaction_rel(10,6)
 real*8 pi,one_over_4pi, center(3), kappa2
 character(100) fhead
@@ -25,28 +27,32 @@ common // pi,one_over_4pi
 !??????????????????????????????????????????????????????????????
 !PARAMETERS: now can be read from usrdate.in file
 
-!PB equation 
-!eps0=1.d0;            !the dielectric constant in molecule 
+!PB equation
+!eps0=1.d0;            !the dielectric constant in molecule
 !eps1=80.d0;           !the dielectric constant in solvent
 !bulk_strength=0.15d0  !ion_strength with units (M)$I=\sum\limits_{i=1}^nc_iz_i^2$
 
 !Treecode
 !order=3               !The order of taylor expansion
 !maxparnode=500        !maximum particles per leaf
-!theta=0.8d0           !MAC, rc/R<MAC, the bigger MAC, the more treecode 
+!theta=0.8d0           !MAC, rc/R<MAC, the bigger MAC, the more treecode
 open(101,file="usrdata.in")
-READ(101,*,IOSTAT = MEOF) fhead, fname
-READ(101,*,IOSTAT = MEOF) fhead, den 
-READ(101,*,IOSTAT = MEOF) fhead, eps0 
-READ(101,*,IOSTAT = MEOF) fhead, eps1 
-READ(101,*,IOSTAT = MEOF) fhead, bulk_strength 
-READ(101,*,IOSTAT = MEOF) fhead, order 
-READ(101,*,IOSTAT = MEOF) fhead, maxparnode 
+READ(101,*,IOSTAT = MEOF) fhead, protein
+READ(101,*,IOSTAT = MEOF) fhead, den
+READ(101,*,IOSTAT = MEOF) fhead, eps0
+READ(101,*,IOSTAT = MEOF) fhead, eps1
+READ(101,*,IOSTAT = MEOF) fhead, bulk_strength
+READ(101,*,IOSTAT = MEOF) fhead, order
+READ(101,*,IOSTAT = MEOF) fhead, maxparnode
 READ(101,*,IOSTAT = MEOF) fhead, theta
 close(101)
 !print *,fname,den,eps0,eps1,bulk_strength,order,maxparnode,theta
 !???????????????????????????????????????????????????????????????
+call sitelistinput
 
+call MPI_INIT(ierr)
+
+fname = sitelist(1)
 !GMRES
 thresh=1.d-20
 itol=2
@@ -95,12 +101,12 @@ LIGW=20
 MLWK=LIGW	! Required minimum length of RGWK array
 NMS=0		! The total number of calls to MSOLVE
 ISYM=0		! If the symmetric matrix is stored only in half way
-!lenw =  10*ndim; leniw = 10*ndim 
-lenw =  10; leniw = 10 
+!lenw =  10*ndim; leniw = 10*ndim
+lenw =  10; leniw = 10
 
 allocate(RGWK(LRGW), IGWK(LIGW), RWORK(lenw), IWORK(leniw), STAT=jerr)
 if (jerr .ne. 0) then
-	Write(*,*) 'Error allocating RGWK, IGWK, RWORK, IWORK, jerr= ', jerr 
+	Write(*,*) 'Error allocating RGWK, IGWK, RWORK, IWORK, jerr= ', jerr
 	write(*,*) 'LRGW=',LRGW,'LIGW=',LIGW,'lenw= ',lenw,'leniw=', leniw
 	stop
 endif
@@ -108,7 +114,7 @@ RGWK=0.d0;	IGWK=0; RWORK=0.d0;	IWORK=0
 IGWK(1:7)=(/MAXL, MAXL, JSCAL, JPRE, NRMAX, MLWK, NMS/)
 
 print *,'Begin to call the solver...'
-call DGMRES(	ndim, bvct, xvct, MATVEC, MSOLVE, ITOL, TOL, ITMAX, & 
+call DGMRES(	ndim, bvct, xvct, MATVEC, MSOLVE, ITOL, TOL, ITMAX, &
 				ITER, ERR, IERR, 0, SB, SX, RGWK, LRGW, IGWK, LIGW, RWORK, IWORK)
 
 print *,'err=',err,'ierr=',ierr,'iter=',iter
@@ -155,13 +161,13 @@ deallocate(SB,SX, RGWK, IGWK, RWORK, IWORK, stat=ierr)
 if (ierr .ne. 0) then
     write(*,*) 'Error deallocating SB,SX, RGWK, IGWK, RWORK, IWORK'
     stop
-endif 
+endif
 
 deallocate(atmpos,atmrad,atmchr,chrpos, stat=ierr)
 if (ierr .ne. 0) then
     write(*,*) 'Error deallocating atmpos,atmrad,atmchr,chrpos'
     stop
-endif 
+endif
 
 DEALLOCATE(x,y,z,q,orderind,STAT=ierr)
 IF (ierr .NE. 0) THEN
@@ -186,9 +192,59 @@ IF (ierr .NE. 0) THEN
     WRITE(6,*) 'Error deallocating copy variables orderarr! '
     STOP
 END IF
+DEALLOCATE(sitelength,STAT=ierr)
+IF (ierr .NE. 0) THEN
+    WRITE(6,*) 'Error deallocating sitelength! '
+    STOP
+END IF
+DEALLOCATE(sitelist,STAT=ierr)
+IF (ierr .NE. 0) THEN
+    WRITE(6,*) 'Error deallocating sitelist! '
+    STOP
+END IF
 
-end program TABIPB 
+call MPI_FINALIZE
 
+end program TABIPB
+!###########################################################################
+!-----------------------------------------------
+Subroutine sitelistinput
+use comdata
+use molecule
+integer i,j
+  lenfname = len(fname)
+  do while (fname(lenfname:lenfname) .eq. ' ')
+      lenfname = lenfname - 1
+  enddo
+  rslt=system('python filenames.py '//fname(1:lenfname))
+  nsite = 0
+  OPEN(102,FILE=FNAME(1:lenfname)//".names")
+  do
+      read(102,*,IOSTAT = MEOF) sitename
+
+      if ((MEOF .eq. 0)) then
+          nsite=nsite+1
+      endif
+      IF(MEOF .LT. 0) EXIT
+  enddo
+  CLOSE(102)
+
+  ALLOCATE(sitelength(nsite),STAT=ierr)
+  ALLOCATE(sitelist(nsite),STAT=ierr)
+  OPEN(102,FILE=FNAME(1:lenfname)//".names")
+  do i=1,nsite
+      read(102,*,IOSTAT = MEOF) sitename
+      sitelength(i) = len(sitename)
+      do while (sitename(sitelength(i):sitelength(i)) .eq. ' ')
+          sitelength(i) = sitelength(i) - 1
+      enddo
+
+      sitelist(i) = sitename
+  enddo
+  CLOSE(102)
+  rslt=system('rm '//fname(1:lenfname)//".names")
+
+end subroutine sitelistinput
 !###########################################################################
 !-----------------------------------------------
 Subroutine output_potential
@@ -198,7 +254,7 @@ use treecode
 use treecode3d_procedures
 implicit none
 integer, dimension(:,:), allocatable :: ind_vert
-real*8, dimension(:,:), allocatable :: vert_ptl,xyz_temp  
+real*8, dimension(:,:), allocatable :: vert_ptl,xyz_temp
 integer i,j,k,jerr,nface_vert
 real*8 tot_length,loc_length,aa(3),pi,para_temp,one_over_4pi,phi_star
 
@@ -217,9 +273,9 @@ para_temp=para*4*pi
 do i=1,numpars
   xtemp(orderarr(i))=xvct(i)           !put things back
   xtemp(orderarr(i)+numpars)=xvct(i+numpars)
-  xyz_temp(:,orderarr(i))=tr_xyz(:,i)  
+  xyz_temp(:,orderarr(i))=tr_xyz(:,i)
 enddo
-xvct=xtemp  
+xvct=xtemp
 tr_xyz=xyz_temp
 
 
@@ -231,15 +287,15 @@ do i=1,numpars
                 ind_vert(nface_vert,nvert(j,i)) = ind_vert(nface_vert,nvert(j,i)) + 1
                 goto 1022
             endif
-        enddo 
+        enddo
         1022 continue
     enddo
 enddo
 
 do i=1,nspt
-    tot_length=0.d0 
+    tot_length=0.d0
     do j=1,ind_vert(nface_vert,i)
-        aa=tr_xyz(:,ind_vert(j,i))-sptpos(:,i) 
+        aa=tr_xyz(:,ind_vert(j,i))-sptpos(:,i)
         loc_length=sqrt(dot_product(aa,aa)) !distance between vertices and centroid
 
         !vert_ptl(1,i)=vert_ptl(1,i)+xvct(ind_vert(j,i))
@@ -250,28 +306,28 @@ do i=1,nspt
     enddo
     !vert_ptl(:,i)=vert_ptl(:,i)/ind_vert(nface_vert,i)
     vert_ptl(:,i)=vert_ptl(:,i)/tot_length
-    
+
     !compute free space induced potentials
     !phi_star=0.d0
     !do j=1,natm
     !    aa=atmpos(:,j)-sptpos(:,i)
-    !    loc_length=sqrt(dot_product(aa,aa)) !distance between vertices and charge center 
-    !    phi_star=phi_star+atmchr(j)/loc_length 
+    !    loc_length=sqrt(dot_product(aa,aa)) !distance between vertices and charge center
+    !    phi_star=phi_star+atmchr(j)/loc_length
     !enddo
     !phi_star=phi_star*one_over_4pi !1/4pi/r
-    !vert_ptl(1,i)=vert_ptl(1,i)+phi_star    
+    !vert_ptl(1,i)=vert_ptl(1,i)+phi_star
 enddo
 
 xvct=xvct*para_temp
 vert_ptl=vert_ptl*para_temp
 
 print *,'The max and min potential and normal derivatives on elements are: '
-write(*,*) 'potential', maxval(xvct(1:nface)),minval(xvct(1:nface)) 
-write(*,*) 'norm derv', maxval(xvct(nface+1:2*nface)),minval(xvct(nface+1:2*nface)) 
+write(*,*) 'potential', maxval(xvct(1:nface)),minval(xvct(1:nface))
+write(*,*) 'norm derv', maxval(xvct(nface+1:2*nface)),minval(xvct(nface+1:2*nface))
 
 print *,'The max and min potential and normal derivatives on vertices are: '
-write(*,*) 'potential', maxval(vert_ptl(1,1:nspt)),minval(vert_ptl(1,1:nspt)) 
-write(*,*) 'norm derv', maxval(vert_ptl(2,1:nspt)),minval(vert_ptl(2,1:nspt)) 
+write(*,*) 'potential', maxval(vert_ptl(1,1:nspt)),minval(vert_ptl(1,1:nspt))
+write(*,*) 'norm derv', maxval(vert_ptl(2,1:nspt)),minval(vert_ptl(2,1:nspt))
 
 open(10,file='surface_potential.dat')
 write (10,*) nspt,nface
@@ -281,7 +337,7 @@ do i=1,nspt
 enddo
 
 do i=1,nface
-	write(10,*) nvert(:,i) 
+	write(10,*) nvert(:,i)
 enddo
 close(10)
 
@@ -316,24 +372,24 @@ real*8, dimension(:), allocatable:: temp_a,temp_b
 real*8, dimension(:,:), allocatable:: temp_q
 
 
-allocate(kk(3,16), der_cof(0:order,0:order,0:order,16), STAT=ierr)	
+allocate(kk(3,16), der_cof(0:order,0:order,0:order,16), STAT=ierr)
 if (ierr .ne. 0) then
 	Write(*,*) 'Error allocating auxilary Taylor coefficients kk and der_ncf'
 	stop
 endif
 
-! The adjustment of k for the recurrance relation 
+! The adjustment of k for the recurrance relation
 kk(:,1)=(/0,0,0/);        ! Original Kernel
 
 kk(:,2)=(/1,0,0/);        ! 1st Order Derivative:	partial x
-kk(:,3)=(/0,1,0/);        !		                    partial y           
+kk(:,3)=(/0,1,0/);        !		                    partial y
 kk(:,4)=(/0,0,1/);        !                         partial z
 
 kk(:,5)=(/1,0,0/);        !							x
 kk(:,6)=(/0,1,0/);    	  !							y
 kk(:,7)=(/0,0,1/);    	  !							z
 
-kk(:,8)=(/2,0,0/);        ! 2nd Order Drivative:	partial xx						
+kk(:,8)=(/2,0,0/);        ! 2nd Order Drivative:	partial xx
 kk(:,9)=(/1,1,0/);    	  !									xy
 kk(:,10)=(/1,0,1/);       !									xz
 kk(:,11)=(/1,1,0/);		  !									yx
@@ -380,7 +436,7 @@ IF (err .NE. 0) THEN
     STOP
 END IF
 
-      
+
 x=tr_xyz(1,:)
 y=tr_xyz(2,:)
 z=tr_xyz(3,:)
@@ -388,11 +444,11 @@ q=1.d0
 
 
 ! Call SETUP to allocate arrays for Taylor expansions
-! and setup global variables. Also, copy variables into global copy arrays. 
+! and setup global variables. Also, copy variables into global copy arrays.
 CALL SETUP(x,y,z,q,numpars,order,iflag,xyzminmax)
 
 ! nullify pointer to root of tree (TROOT) and create tree
-NULLIFY(troot)  
+NULLIFY(troot)
 
 ! creating tree
 
@@ -420,8 +476,8 @@ enddo
 
 CALL CPU_TIME(timeend)
 totaltime=timeend-timebeg
-WRITE(6,*) 'Time to create tree (secs):',totaltime      
-      
+WRITE(6,*) 'Time to create tree (secs):',totaltime
+
 deallocate(temp_a,temp_b,temp_q, STAT=err)
 IF (err .NE. 0) THEN
     WRITE(6,*) 'Error deallocating temp_a, temp_b, temp_q!'
@@ -447,7 +503,7 @@ if (sum(abs(xx))<1.d-10) goto 1022
 CALL TREE_COMPP_PB(troot,kappa,eps,xx)
 1022 bb=xx
 !call cpu_time(timeend)
-!print *,'time to compute AX=: ',timeend-timebeg 
+!print *,'time to compute AX=: ',timeend-timebeg
 CALL REMOVE_MMT(troot)
 
 return
@@ -489,21 +545,21 @@ allocate(tchg(nface,16,2),schg(nface,16,2),tr_area(nface))
 tr_xyz=0.d0;	tr_q=0.d0;	bvct=0.d0;	xvct=0.d0
 tchg=0.d0;		schg=0.d0;	tr_area=0.d0
 
- 
+
 do i=1,nface    ! for phi on each element
     idx=nvert(1:3,i) ! vertices index of the specific triangle
     r0=0.d0;    v0=0.d0
-    do k=1,3 
+    do k=1,3
         r0=r0+1.d0/3.d0*sptpos(1:3,idx(k))	!centriod
-        v0=v0+1.d0/3.d0*sptnrm(1:3,idx(k))	
+        v0=v0+1.d0/3.d0*sptnrm(1:3,idx(k))
 	    r(:,k)=sptpos(1:3,idx(k))
 	    v(:,k)=sptnrm(1:3,idx(k))
     enddo
     !print *,v0
-    
+
     ! Way 1: normlize the midpoint v0
     v0=v0/sqrt(dot_product(v0,v0))
-	
+
     !#######################################################################################
     !modification if it is not a sphere
     !r0=r0/sqrt(dot_product(r0,r0))*rds     ! project to the sphere surface
@@ -511,12 +567,12 @@ do i=1,nface    ! for phi on each element
     !######################################################################################
     tr_xyz(:,i)=r0			! Get the position of particles
     tr_q(:,i)=v0			! Get the normal of the paricles, acting as charge in treecode
-    
+
     aa=sqrt(dot_product(r(:,1)-r(:,2),r(:,1)-r(:,2)))
     bb=sqrt(dot_product(r(:,1)-r(:,3),r(:,1)-r(:,3)))
     cc=sqrt(dot_product(r(:,2)-r(:,3),r(:,2)-r(:,3)))
     tr_area(i)=triangle_area(aa,bb,cc)
-    							
+
     ! setup the right hand side of the system of equations
     do j=1,nchr ! for each atom
 
@@ -525,7 +581,7 @@ do i=1,nface    ! for phi on each element
         G0=1.d0/(4.d0*pi*rs)
         cos_theta=dot_product(v0,rr-r0)/rs
         G1=cos_theta/rs**2/4.d0/pi
-    
+
         bvct(i)=bvct(i)+atmchr(j)*G0/eps0
  	bvct(nface+i)=bvct(nface+i)+atmchr(j)*G1/eps0
     enddo
@@ -548,12 +604,12 @@ common // pi,one_over_4pi
 ptl=0.d0
 
 do j=1,nface ! for each triangle
-    
+
     r=tr_xyz(:,j)
     v=tr_q(:,j)
 
     rs=sqrt(dot_product(r-r0,r-r0))
-          
+
     G0=one_over_4pi/rs
     kappa_rs=kappa*rs
     exp_kappa_rs=exp(-kappa_rs)
@@ -572,7 +628,7 @@ do j=1,nface ! for each triangle
 
     ptl=ptl+tr_area(j)*H1*xvct(j)
     ptl=ptl+tr_area(j)*H2*xvct(nface+j)
-    
+
 !    ptl=ptl+tr_area(j)*H1(tr_q(1:3,j),tr_xyz(1:3,j),r0,eps,kappa)*xvct(j)
 !    ptl=ptl+tr_area(j)*H2(tr_xyz(1:3,j),r0,kappa)*xvct(nface+j)
 enddo
@@ -589,7 +645,7 @@ use treecode
 use treecode3d_procedures
 implicit double precision(a-h,o-z)
 integer ikp,ixyz,jxyz,indx !ixyz: source; jxyz target;
-real*8 phi(2*numpars) 
+real*8 phi(2*numpars)
 
 do ikp=1,2
 	indx=0
@@ -603,7 +659,7 @@ do ikp=1,2
 			schg(:,indx,ikp)=(tr_q(ixyz,:)*(2-iknl)+1.d0*(iknl-1))*tr_area*phi((iknl-1)*numpars+1:iknl*numpars)
 		enddo
 	enddo
-	
+
 	do ixyz=1,3
 		do jxyz=1,3
 			indx=indx+1
@@ -611,7 +667,7 @@ do ikp=1,2
 			schg(:,indx,ikp)=-tr_q(ixyz,:)*tr_area*phi(1:numpars)
 		enddo
 	enddo
-	
+
 enddo
 
 end

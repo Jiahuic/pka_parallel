@@ -82,18 +82,18 @@ def main(PBDID):
 
     out = open(''.join([PBDID,'.names']),'w')
     # all mute goes first
-    out.write(''.join([PBDID,'_all_mute','.pqr']))
+    out.write(''.join([PBDID,'_all_mute']))
     out.write('\n')
     # intrinsic items for each titratable site
     for item in titr_res_name:
         for num in titr_site[item]:
             pro = titrResDict(item,'on')
             dep = titrResDict(item,'off')
-            out.write(''.join([PBDID,'_',pro,str(num),'.pqr'])) # first are the protonated one titratable site on the protein
+            out.write(''.join([PBDID,'_',pro,str(num)])) # first are the protonated one titratable site on the protein
             out.write('\n')
-            out.write(''.join(['aalone_',PBDID,'_',pro,str(num),'.pqr'])) # follows are the protonated one titritable sites off protein
+            out.write(''.join(['aalone_',PBDID,'_',pro,str(num)])) # follows are the protonated one titritable sites off protein
             out.write('\n')
-            out.write(''.join(['aalone_',PBDID,'_',dep,str(num),'.pqr']))  # last are the deprotonated one titritable site off protein
+            out.write(''.join(['aalone_',PBDID,'_',dep,str(num)]))  # last are the deprotonated one titritable site off protein
             out.write('\n')
 
     # site-site interaction: I knew for wrapper, it uese a detour to solve
@@ -105,10 +105,10 @@ def main(PBDID):
     for each in site_site:
         for site in site_site:
             if(each != site):
-                out.write(''.join([PBDID,'_',each,'_',site,'.pqr']))
+                out.write(''.join([PBDID,'_',each,'_',site]))
                 out.write('\n')
             else:
-                out.write(''.join([PBDID,'_',each,'_s_s.pqr\n']))
+                out.write(''.join([PBDID,'_',each,'_s_s\n']))
     out.close()
 
 if __name__ == "__main__":

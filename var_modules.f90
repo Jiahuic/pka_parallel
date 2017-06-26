@@ -6,19 +6,19 @@ MODULE MOLECULE
     real*8  :: eps, kappa, rds, eps0, eps1, para
 
     real*8,  dimension(:),     allocatable :: atmrad, atmchr
-    real*8,  dimension(:,:),   allocatable :: atmpos , sptpos ,sptnrm, chrpos, chrpos_sph 
+    real*8,  dimension(:,:),   allocatable :: atmpos , sptpos ,sptnrm, chrpos, chrpos_sph
     real*8,  dimension(:,:,:), allocatable :: chgmnx
-	
+
     integer, dimension(:),     allocatable :: natmaff, nsftype, mface !, natmsf, nsfatm,  npture, nsptno
     integer, dimension(:,:),   allocatable :: nvert
 
 END MODULE MOLECULE
 
-MODULE COMDATA   
+MODULE COMDATA
 
    character(100) :: fname,pathname,den
-   
-   integer :: lenpath,lenfname 
+
+   integer :: lenpath,lenfname
 
    real*8, dimension(:), allocatable :: bvct,xvct,F_exa, xtemp
    real*8, dimension(:,:), allocatable :: amtrx
@@ -27,8 +27,13 @@ MODULE COMDATA
 integer,allocatable,dimension(:):: iwork,IGWK
 real*8,allocatable,dimension(:):: rwork,sb,sx,RGWK
 !######################################################
-           
-END MODULE COMDATA 
+!   pka parallel
+    integer :: nsite
+    integer, dimension(:), allocatable :: sitelength
+    character(100) :: sitename, protein
+    character (len=100), dimension(:), allocatable :: sitelist
+
+END MODULE COMDATA
 
 
 module bicg
@@ -48,10 +53,10 @@ module treecode
 ! runtime parameters
 
       INTEGER :: numpars,order,maxparnode,iflag,forcedim
-      
-      !REAL(KIND=r8) :: theta 
+
+      !REAL(KIND=r8) :: theta
       real*8 :: theta
-! arrays for coordinates, charge, potential & force (tree and direct) 
+! arrays for coordinates, charge, potential & force (tree and direct)
 
       REAL*8,ALLOCATABLE,DIMENSION(:) :: x,y,z,q
       !REAL(KIND=r8),ALLOCATABLE,DIMENSION(:) :: tpoten,dpoten
