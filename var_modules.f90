@@ -81,3 +81,8 @@ module treecode
       real*8, dimension(:,:,:,:), allocatable:: der_cof
       integer, dimension(:,:), allocatable:: kk
 end module treecode
+!------------------------------------------------------------------
+module MPI_var
+integer :: my_rank, num_process, local_numpars, local_beg, local_end
+
+end module MPI_var
