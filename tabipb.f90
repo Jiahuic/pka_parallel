@@ -8,12 +8,13 @@
 ! 7. Extension from spherical cavity to real molecules
 ! 8. Preconditioning: Diagnal Scaling
 
-subroutine TABIPB
+subroutine TABIPB(soleng)
 use molecule
 use comdata
 use bicg
 use treecode
 use treecode3d_procedures
+use MPI_var
 implicit double precision(a-h,o-z)
 real*8 r0(3), Pxyz(3), err_surf(10,6), err_reaction(10,6), err_reaction_rel(10,6)
 real*8 pi,one_over_4pi, center(3), kappa2
@@ -99,15 +100,15 @@ do iatm=1,nchr
 enddo
 
 
-print *,'Solvation energy=:' ,soleng
+!print *,'Solvation energy=:' ,soleng
 
 !call output_potential
 
 call cpu_time(cpu4)
-print *,'setup cpu=', real(cpu2-cpu1)
-print *,'solving cpu=', real(cpu3-cpu2)
-print *,'cpu for computing solvation energy=',real(cpu4-cpu3)
-print *,'Total cpu= ', real(cpu4-cpu1)
+!print *,'setup cpu=', real(cpu2-cpu1)
+!print *,'solving cpu=', real(cpu3-cpu2)
+!print *,'cpu for computing solvation energy=',real(cpu4-cpu3)
+!print *,'Total cpu= ', real(cpu4-cpu1)
 
 print *,'deallocating memories...'
 print *,'all done, thank you for using tabipb!'
@@ -161,6 +162,7 @@ IF (ierr .NE. 0) THEN
     WRITE(6,*) 'Error deallocating copy variables orderarr! '
     STOP
 END IF
+
 
 end subroutine TABIPB
 

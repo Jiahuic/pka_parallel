@@ -24,9 +24,8 @@ real*4 xyzqr(5)
     do while (fname(lenfname:lenfname) .eq. ' ')
         lenfname = lenfname - 1
     enddo
-
     nremark=0
-    open(102,file=pathname(1:lenpath)//fname(1:lenfname)//".pqr")
+    open(102,file=pathname(1:lenpath)//fname(1:lenfname)//'.pqr')
     do
         READ(102,*) fhead
         if (fhead(1:6)=='REMARK') then

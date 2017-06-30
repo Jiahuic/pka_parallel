@@ -1,7 +1,7 @@
 # makefile for bimpb
 #F90= ifort
 #flag= -fast -c
-F90 = gfortran
+F90 = mpif90
 flag= -O2 -c
 pka_parallel.exe: var_modules.o treecode3d_pb.o main.o tabipb.o readin.o dgmres_dep.o
 	$(F90)  -o pka_parallel.exe *.o
